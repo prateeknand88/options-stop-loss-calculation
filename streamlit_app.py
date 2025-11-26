@@ -93,4 +93,4 @@ for lvl in levels:
 
 df = pd.DataFrame(data, columns=["SL %", "Raw SL", "Greek Adjusted SL"])
 
-st.dataframe(df, use_container_width=True)
+st.dataframe(df, width='stretch')
