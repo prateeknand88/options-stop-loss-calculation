@@ -1,96 +1,74 @@
 import streamlit as st
 import pandas as pd
+import yfinance as yf
 
-st.set_page_config(page_title="LEAPS Stop-Loss Calculator", layout="wide")
+st.title("Option Stop-Loss Calculator")
+st.markdown("This tool calculates stop-loss levels for stock options.")
 
-st.title("📉 Stock Option Stop-Loss Calculator (Greek Adjusted)")
-st.write("Automatically calculate stop-loss for LEAPS using premium, Greeks, and intelligent % rules.")
+# --- User Inputs ---
+premium = st.number_input("Option Premium ($)", min_value=0.0, step=0.01, help="Enter the current option premium")
+sl_percent = st.number_input("Stop-Loss Percentage (%)", min_value=1.0, max_value=99.0, value=30.0, help="Percentage drop from premium at which stop-loss should trigger")
 
-# --- Inputs ---
-st.header("Input Parameters")
+# --- Advanced Inputs ---
+st.markdown("---")
+st.subheader("Advanced: Fetch Option Chain")
+use_advanced = st.checkbox("Fetch from API (yfinance)")
 
-col1, col2, col3 = st.columns(3)
-with col1:
-    entry_price = st.number_input(
-        "Entry Premium",
-        min_value=0.01,
-        value=1.40,
-        step=0.01,
-        help="The price you paid for the option contract (Ask price for BUY orders)."
-    )
+if use_advanced:
+    ticker = st.text_input("Stock Ticker", help="Enter the underlying US stock ticker, e.g., AAPL, TSLA")
+    strike_price = st.number_input("Strike Price", min_value=0.0, step=0.5, help="Strike price of the option")
+    expiry = st.text_input("Expiration Date (YYYY-MM-DD)", help="Option expiration date")
+    option_type = st.radio("Option Type", ["Call", "Put"], help="Select Call or Put")
 
-with col2:
-    stop_loss_percent = st.number_input(
-        "Stop-Loss %",
-        min_value=1,
-        max_value=90,
-        value=30,
-        step=1,
-        help="The percentage drop from your entry price at which the stop-loss should trigger."
-    )
+    if st.button("Fetch & Calculate Stop Loss"):
+        try:
+            # Fetch option chain from yfinance
+            ticker_obj = yf.Ticker(ticker)
+            opt_chain = ticker_obj.option_chain(expiry)
+            if option_type.lower() == 'call':
+                option_data = opt_chain.calls
+            else:
+                option_data = opt_chain.puts
 
-with col3:
-    days_to_hold = st.number_input(
-        "Days Expected Before Review",
-        min_value=1,
-        value=30,
-        help="How long you plan to hold the LEAPS before reviewing the position. Used for Theta-based decay calculations."
-    )
+            option_row = option_data[option_data['strike'] == strike_price]
 
-col4, col5 = st.columns(2)
-with col4:
-    theta = st.number_input(
-        "Theta (daily)",
-        value=-0.002,
-        step=0.001,
-        format="%.4f",
-        help="Daily time decay of the option premium. Typically a small negative number for LEAPS."
-    )
+            if option_row.empty:
+                st.error("No option data found for this strike and expiry.")
+            else:
+                premium_api = float(option_row['lastPrice'].values[0])
+                sl_level_api = premium_api * (1 - sl_percent / 100)
 
-with col5:
-    delta = st.number_input(
-        "Delta",
-        value=0.20,
-        step=0.01,
-        help="Sensitivity of the option price to a $1 move in the underlying. Higher delta = stronger correlation."
-    )
+                st.subheader("Results from API")
+                st.write(f"**Current Premium:** ${premium_api:.2f}")
+                st.write(f"**Stop-Loss Premium ({sl_percent}%):** ${sl_level_api:.2f}")
 
-st.divider()
+                # Suggested Stop-Loss Table
+                percentages = list(range(10, 60, 10))
+                levels = [premium_api * (1 - p/100) for p in percentages]
+                df_sl = pd.DataFrame({"Stop-Loss %": percentages, "Premium Level ($)": [f"{x:.2f}" for x in levels]})
+                st.table(df_sl)
 
-# --- Raw Stop-Loss ---
-raw_sl = entry_price * (1 - stop_loss_percent / 100)
+                # # Display option row with Greeks
+                # st.subheader("Option Data with Greeks")
+                # display_cols = ['contractSymbol', 'strike', 'lastPrice', 'bid', 'ask', 'change', 'volume', 'openInterest', 'impliedVolatility', 'inTheMoney', 'delta', 'gamma', 'theta', 'vega', 'rho']
+                # # Some columns may not exist, filter those that exist
+                # available_cols = [col for col in display_cols if col in option_row.columns]
+                # st.table(option_row[available_cols])
 
-# --- Theta Decay ---
-theta_decay = abs(theta) * days_to_hold
+        except Exception as e:
+            st.error(f"Error fetching option chain from yfinance: {e}")
 
-# --- Greek-adjusted stop loss ---
-greek_adjusted_sl = entry_price - ((entry_price * stop_loss_percent / 100) - theta_decay)
+# --- Manual Calculation ---
+else:
+    if st.button("Calculate Stop Loss"):
+        sl_level = premium * (1 - sl_percent / 100)
 
-# --- Results ---
-st.header("Results")
+        st.subheader("Manual Results")
+        st.write(f"**Current Premium:** ${premium:.2f}")
+        st.write(f"**Stop-Loss Premium ({sl_percent}%):** ${sl_level:.2f}")
 
-colA, colB, colC = st.columns(3)
-
-with colA:
-    st.metric("Raw Stop-Loss (No Greeks)", f"{raw_sl:.2f}")
-
-with colB:
-    st.metric("Theta Decay Over Period", f"{theta_decay:.2f}")
-
-with colC:
-    st.metric("Greek-Adjusted Stop-Loss", f"{greek_adjusted_sl:.2f}")
-
-# --- Table for multiple SL levels ---
-st.subheader("Stop-Loss Levels Summary")
-
-levels = [20, 25, 30, 35, 40]
-
-data = []
-for lvl in levels:
-    raw = entry_price * (1 - lvl / 100)
-    adjusted = entry_price - ((entry_price * lvl / 100) - theta_decay)
-    data.append((lvl, round(raw, 2), round(adjusted, 2)))
-
-df = pd.DataFrame(data, columns=["SL %", "Raw SL", "Greek Adjusted SL"])
-
-st.dataframe(df, width='stretch')
+        st.subheader("Suggested Stop-Loss Levels")
+        percentages = list(range(10, 60, 10))
+        levels = [premium * (1 - p/100) for p in percentages]
+        df = pd.DataFrame({"Stop-Loss %": percentages, "Premium Level ($)": [f"{x:.2f}" for x in levels]})
+        st.table(df)
