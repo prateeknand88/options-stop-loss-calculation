@@ -239,7 +239,7 @@ def ai_summary():
     # ------------ CONFIG ------------
     st.set_page_config(page_title="AI Stock Summary", layout="wide")
     
-    client = OpenAI()
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
     
     st.title("📈 AI Stock Summary")
     
