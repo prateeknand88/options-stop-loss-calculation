@@ -337,7 +337,7 @@ def ai_summary():
             - Key risks to watch
             """
 
-            model = genai.GenerativeModel("gemini-2.5-flash")
+            model = genai.GenerativeModel("gemini-2.0-flash-live")
             ai_response = model.generate_content(prompt)
 
             st.write(ai_response.text)
