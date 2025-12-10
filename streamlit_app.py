@@ -350,7 +350,7 @@ def ai_summary():
 # ----------------- Register pages -----------------
 PAGES['profit_loss']={'label':'Options Profit Loss','func':calculator_main}
 PAGES['stop_loss']={'label':'Stop Loss','func':stop_loss_calc}
-#PAGES['Coming Soon']={'label':'Com','func':settings_page}
+PAGES['ai_summary']={'label':'AI Summary','func':ai_summary}
 
 # ----------------- Run App -----------------
 selected = nav_bar_horizontal('profit_loss')
