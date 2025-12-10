@@ -4,7 +4,8 @@ import pandas as pd
 import numpy as np
 from math import log, sqrt, exp, pi, erf
 from datetime import date, datetime, timedelta
-from openai import OpenAI
+import google.generativeai as genai
+
 
 # ----------------- App config -----------------
 st.set_page_config(page_title="Option Suite", layout="wide")
@@ -236,22 +237,22 @@ def ai_summary():
     # st.header("AI Summary")
     # st.info("Adjust defaults here. No session storage, values reset on refresh.")
 
-    # ------------ CONFIG ------------
-    st.set_page_config(page_title="AI Stock Summary", layout="wide")
-    
-    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-    
-    st.title("📈 AI Stock Summary")
-    
+    # Configure Gemini API
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+
+    st.set_page_config(page_title="AI Stock Summary (Gemini)", layout="wide")
+
+    st.title("📈 AI Stock Summary (Powered by Gemini)")
+
     ticker = st.text_input("Enter Stock Ticker (e.g., AAPL, TSLA, MSFT)").upper()
-    
+
     if ticker:
         try:
             stock = yf.Ticker(ticker)
-    
+
             # ---------- FUNDAMENTALS ----------
             info = stock.info
-    
+
             company_name = info.get("longName", ticker)
             sector = info.get("sector", "N/A")
             industry = info.get("industry", "N/A")
@@ -261,12 +262,12 @@ def ai_summary():
             roe = info.get("returnOnEquity", None)
             debt = info.get("totalDebt", None)
             revenue_growth = info.get("revenueGrowth", None)
-    
+
             # ---------- PRICE DATA ----------
             data = stock.history(period="1y")
             data["EMA_20"] = data["Close"].ewm(span=20).mean()
             data["EMA_50"] = data["Close"].ewm(span=50).mean()
-    
+
             # RSI calculation
             delta = data["Close"].diff()
             gain = np.where(delta > 0, delta, 0)
@@ -275,17 +276,17 @@ def ai_summary():
             avg_loss = pd.Series(loss).rolling(14).mean()
             rs = avg_gain / avg_loss
             data["RSI"] = 100 - (100 / (1 + rs))
-    
-            # price trend
+
             trend = (
                 "Uptrend" if data["EMA_20"].iloc[-1] > data["EMA_50"].iloc[-1]
                 else "Downtrend"
             )
-    
+
             # ---------- DISPLAY DATA ----------
             st.subheader(f"📌 {company_name} ({ticker})")
-    
+
             col1, col2 = st.columns(2)
+
             with col1:
                 st.write("### Fundamentals")
                 st.write(f"**Sector:** {sector}")
@@ -296,7 +297,7 @@ def ai_summary():
                 st.write(f"**ROE:** {roe}")
                 st.write(f"**Revenue Growth:** {revenue_growth}")
                 st.write(f"**Total Debt:** {debt}")
-    
+
             with col2:
                 st.write("### Technicals")
                 st.write(f"**Latest Close:** {round(data['Close'].iloc[-1], 2)}")
@@ -304,12 +305,13 @@ def ai_summary():
                 st.write(f"**EMA 50:** {round(data['EMA_50'].iloc[-1], 2)}")
                 st.write(f"**RSI (14):** {round(data['RSI'].iloc[-1], 2)}")
                 st.write(f"**Trend:** {trend}")
-    
-            # ---------- AI SUMMARY ----------
-            st.subheader("🤖 AI Summary")
+
+            # ---------- AI SUMMARY (Gemini) ----------
+            st.subheader("🤖 Gemini AI Summary")
+
             prompt = f"""
-            Provide a clear, concise analyst-style summary for the stock {ticker}.
-    
+            Provide a concise, analyst-style stock summary for {ticker}.
+
             FUNDAMENTALS:
             - Company: {company_name}
             - Sector: {sector}
@@ -320,32 +322,30 @@ def ai_summary():
             - ROE: {roe}
             - Revenue Growth: {revenue_growth}
             - Total Debt: {debt}
-    
+
             TECHNICALS:
             - Latest Price: {round(data['Close'].iloc[-1], 2)}
             - EMA 20: {round(data['EMA_20'].iloc[-1], 2)}
             - EMA 50: {round(data['EMA_50'].iloc[-1], 2)}
-            - RSI: {round(data['RSI'].iloc[-1] if not np.isnan(data['RSI'].iloc[-1]) else 50, 2)}
+            - RSI: {round(data['RSI'].iloc[-1], 2)}
             - Trend: {trend}
-    
+
             Create:
-            - A simple bullish/bearish/neutral view
-            - Key risks
-            - Short-term technical view
-            - Long-term fundamental view
+            - Bullish/Bearish/Neutral sentiment
+            - Short-term technical outlook
+            - Long-term fundamental outlook
+            - Key risks to watch
             """
-    
-            ai_response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=300
-            )
-    
-            st.write(ai_response.choices[0].message["content"])
-    
+
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            ai_response = model.generate_content(prompt)
+
+            st.write(ai_response.text)
+
         except Exception as e:
             st.error(f"Error fetching data: {e}")
 
+    
 
 # ----------------- Register pages -----------------
 PAGES['profit_loss']={'label':'Options Profit Loss','func':calculator_main}
